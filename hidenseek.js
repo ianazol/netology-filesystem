@@ -3,7 +3,7 @@ const random = require('./random');
 const PokemonList = require('./pokemonList');
 const fileName = 'pokemon.txt';
 
-function hide(path, pokemonList, callback){
+function hide(path, pokemonList){
 
 	const foldersCount = 10;
 
@@ -13,82 +13,88 @@ function hide(path, pokemonList, callback){
 		hiddenPokemonsIndex = random.randomList(0, pokemonList.length - 1, hiddenCount),
 		hiddenFoldersIndex = random.randomList(1, foldersCount, hiddenCount);
 
-	function savePokemonInList(pokemonObj){
-		hiddenPokemons.push(pokemonObj);
-	  	if (hiddenPokemons.length == hiddenCount)
-	  		callback(null, hiddenPokemons);
-	}
+	return new Promise((resolve, reject) => {
 
-	function createFile(folderIndex, folderName){
-   		if(hiddenFoldersIndex.indexOf(folderIndex) != -1){
-   			let pokemonObj = pokemonList[hiddenPokemonsIndex.shift()];
-
-   			fs.writeFile(path + "/" + folderName + "/" + fileName, pokemonObj.info(), (error) => {
-			  	if (error) callback(error, null);
-			  	savePokemonInList(pokemonObj);
-			});
-   		}
-	}
-
-	function createFolders(error){
-		if (error) callback(error, null);
-	  	
-  		for (let i = 1; i <= foldersCount; i++) {
-  			let folderName = String(i);
-  			if (folderName.length < 2)
-  				folderName = '0'+ folderName;
-
-		   	fs.mkdir(path + "/" + folderName, (error) => {
-		   		if (error) callback(error, null);
-		   		createFile(i, folderName);
-		   	});
+		function savePokemonInList(pokemonObj){
+			hiddenPokemons.push(pokemonObj);
+			if (hiddenPokemons.length == hiddenCount)
+				resolve(hiddenPokemons);
 		}
-	}
 
-	function checkAccess(){
-		fs.access(path, fs.constants.W_OK, createFolders);
-	}
+		function createFile(folderIndex, folderName){
+			if(hiddenFoldersIndex.indexOf(folderIndex) != -1){
+				let pokemonObj = pokemonList[hiddenPokemonsIndex.shift()];
 
-	checkAccess();
+				fs.writeFile(path + "/" + folderName + "/" + fileName, pokemonObj.info(),
+					(error) => {
+						if (error) reject(error);
+						savePokemonInList(pokemonObj);
+					}
+				)
+			}
+		}
+
+		function createFolders(error){
+			if (error) reject(error);
+
+			for (let i = 1; i <= foldersCount; i++) {
+				let folderName = String(i);
+				if (folderName.length < 2)
+					folderName = '0'+ folderName;
+
+				fs.mkdir(path + "/" + folderName, (error) => {
+					if (error) reject(error);
+					createFile(i, folderName);
+				});
+			}
+		}
+
+		function checkAccess(){
+			fs.access(path, fs.constants.W_OK, createFolders);
+		}
+
+		checkAccess();
+	});
 }
 
-function seek(path, callback){
+function seek(path){
 
 	let foundedPokemons = new PokemonList(),
 		readedFolders = 0,
 		foldersCount;
 
-	function readFiles(error, data){
-		readedFolders++;
+	return new Promise((resolve, reject) => {
 
-	  	if (!error){
-	  		let pokemonData = data.split("|");
-		  	foundedPokemons.add(pokemonData[0], pokemonData[1]);
+		function readFiles(error, data){
+			readedFolders++;
 
-		  	if (readedFolders == foldersCount)
-	  			callback(null, foundedPokemons);
-	  	}
-	}
+			if (!error){
+				let pokemonData = data.split("|");
+				foundedPokemons.add(pokemonData[0], pokemonData[1]);
 
-	function searchFiles(error, folders){
-		if (error) callback(error, null);
-		foldersCount = folders.length;
+				if (readedFolders == foldersCount)
+					resolve(foundedPokemons);
+			}
+		}
 
-	  	folders.forEach(function(folder) {
-      		fs.readFile(path + folder + '/' + fileName, 'utf8', readFiles);
-	  	});
-	}
+		function searchFiles(error, folders){
+			if (error) reject(error);
+			foldersCount = folders.length;
 
-	function getFolders(){
-		fs.readdir(path, searchFiles);
-	}
-	
-	getFolders();
+			folders.forEach(function(folder) {
+				fs.readFile(path + folder + '/' + fileName, 'utf8', readFiles);
+			});
+		}
+
+		function getFolders(){
+			fs.readdir(path, searchFiles);
+		}
+
+		getFolders();
+	});
 }
 
 module.exports = {
 	hide,
 	seek
-}
-
-
+};
